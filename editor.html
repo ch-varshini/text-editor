@@ -1,19 +1,72 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Talk & Type Editor - Smooth Mic Access</title>
-
-  <!-- External CSS -->
-  <link rel="stylesheet" href="css/editor.css">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Talk & Type Editor - Smooth Mic Access</title>
+<style>
+  :root{
+    --panel:#2a2a2a;
+    --accent:#1abc9c;
+  }
+  body {
+    font-family: Arial, sans-serif;
+    margin:0;
+    padding:20px;
+    color:#fff;
+    scroll-behavior: smooth;
+    background: linear-gradient(-45deg, #a2d9ff, #58a6ff, #1a75ff, #0d47a1);
+    background-size: 400% 400%;
+    animation: blueShift 18s ease-in-out infinite;
+  }
+  @keyframes blueShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  h1 { text-align:center; margin:10px 0 30px; text-shadow:0 0 8px rgba(0,0,0,0.6); }
+  .container { max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:40px; }
+  .editor-section { background:rgba(0,0,0,0.55); border-radius:16px; padding:25px; box-shadow:0 6px 25px rgba(0,0,0,0.4); }
+  label { font-size:1.2rem; margin-bottom:10px; display:block; font-weight:600; }
+  .toolbar { display:flex; gap:12px; margin-bottom:12px; }
+  .toolbar button, .mic-button, .clear-button, .completed-button {
+    border:none; border-radius:8px; padding:8px 16px; cursor:pointer; font-weight:600; color:white; transition:0.3s;
+  }
+  .toolbar button { background:var(--accent); }
+  .editor, .voice-editor {
+    width:100%; min-height:260px; padding:14px; font-size:1rem;
+    border:none; border-radius:10px; background:var(--panel); color:white;
+    outline:none; white-space:pre-wrap; overflow-y:auto; line-height:1.5;
+  }
+  .mic-button { background:var(--accent); font-size:1.2rem; }
+  .mic-button.active { background:#16a085; }
+  .clear-button { background:linear-gradient(270deg,#1abc9c,#16a085); animation: shimmer 3s infinite; background-size:200% 200%; }
+  @keyframes shimmer { 0% { background-position:0% 50%; } 100% { background-position:200% 50%; } }
+  .completed-button { background:gold; color:#111; font-weight:700; animation:glitter 1s infinite alternate; }
+  @keyframes glitter { from{box-shadow:0 0 6px gold;} to{box-shadow:0 0 18px gold;} }
+  .voice-edit-panel { display:none; gap:40px; margin-top:30px; flex-wrap:nowrap; }
+  .voice-edit-panel.active { display:flex; justify-content:space-between; }
+  .voice-text-container { flex:2; display:flex; flex-direction:column; margin-right:20px; }
+  .voice-commands-container { flex:1; background:#2b2b2b; border-radius:10px; padding:15px; box-shadow:inset 0 0 8px rgba(0,0,0,0.4); display:flex; flex-direction:column; justify-content:space-between; }
+  #command-feedback { margin-top:10px; padding:8px; border-radius:6px; background:#111; text-align:center; color:#9df; }
+  .bold { font-weight:700; } .underline { text-decoration:underline; }
+  .button-row { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:15px; }
+  @media (max-width:800px) { .voice-edit-panel.active { flex-direction:column; } .voice-text-container, .voice-commands-container { width:100%; margin-right:0; } }
+  #toast {
+    visibility: hidden; min-width: 240px; background: #16a085; color: #fff;
+    text-align: center; border-radius: 8px; padding: 12px;
+    position: fixed; top: 20px; right: 20px; font-weight: 600;
+    z-index: 9999; transition: all 0.5s ease-in-out;
+  }
+  #toast.show { visibility: visible; opacity: 1; transform: translateY(0); }
+</style>
 </head>
 <body>
   <h1>🎙️ Talk & Type Text Editor</h1>
   <div id="toast">🎧 Microphone access granted!</div>
 
   <div class="container">
-    <!-- Manual Typing Section -->
+    <!-- Manual Section -->
     <div class="editor-section">
       <label for="manual-text">Manual Typing / Paste Text:</label>
       <div class="toolbar">
@@ -62,7 +115,203 @@
     </div>
   </div>
 
-  <!-- External JS -->
-  <script src="js/editor.js"></script>
+<script>
+const manualEditor = document.getElementById('manual-text');
+const voiceEditor = document.getElementById('voice-text');
+const micBtn = document.getElementById('mic-btn');
+const completedBtn = document.getElementById('completed-btn');
+const startEditContainer = document.getElementById('start-edit-container');
+const startEditBtn = document.getElementById('start-edit-btn');
+const voiceEditPanel = document.getElementById('voice-edit-panel');
+const voiceTextDisplay = document.getElementById('voice-text-display');
+const commandMicBtn = document.getElementById('command-mic-btn');
+const commandFeedback = document.getElementById('command-feedback');
+const toast = document.getElementById('toast');
+
+let recognition, commandRecognition;
+let isMicOn = false, isCommandMicOn = false, editingMode = false;
+let micPermissionGranted = false;
+let finalTranscript = "";
+
+/* Toast Notification */
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 3000);
+}
+
+/* Request Permission Once */
+async function requestMicPermissionOnce() {
+  if (micPermissionGranted) return true;
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    micPermissionGranted = true;
+    showToast("🎧 Microphone access granted!");
+    return true;
+  } catch (err) {
+    alert("⚠️ Please allow microphone access to use voice features.");
+    return false;
+  }
+}
+
+/* Color Change */
+function changeColor(){
+  const c = prompt("Enter color name or hex code:");
+  if(c) document.execCommand('foreColor', false, c);
+}
+
+/* Highlight Function */
+function highlightWord(targetEl, target, fn) {
+  if (!target || !target.trim()) return;
+  const html = targetEl.innerHTML;
+  const re = new RegExp(`(${target})`, "gi");
+  const newHtml = html.replace(re, (_, m) => fn(m).outerHTML);
+  targetEl.innerHTML = newHtml;
+}
+
+/* Speech Recognition */
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  commandRecognition = new SR();
+  commandRecognition.continuous = false;
+  commandRecognition.interimResults = false;
+  commandRecognition.lang = 'en-US';
+
+  recognition.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalTranscript += t + " ";
+      else interim += t;
+    }
+    voiceEditor.innerText = finalTranscript + interim;
+  };
+
+  commandRecognition.onresult = e => {
+    const text = e.results[e.resultIndex][0].transcript.trim();
+    applyCommand(text);
+  };
+
+  commandRecognition.onend = () => {
+    if (isCommandMicOn) setTimeout(() => commandRecognition.start(), 300);
+  };
+}
+
+/* Mic Control */
+micBtn.onclick = async () => {
+  if (!recognition) return alert("Speech Recognition not supported.");
+  const allowed = await requestMicPermissionOnce();
+  if (!allowed) return;
+
+  if (!isMicOn) {
+    recognition.start();
+    micBtn.classList.add('active');
+    micBtn.textContent = '⏹️ Stop';
+    isMicOn = true;
+  } else {
+    recognition.stop();
+    micBtn.classList.remove('active');
+    micBtn.textContent = '🎤 Start';
+    isMicOn = false;
+  }
+};
+
+/* Clear & Edit */
+function clearVoiceEditor() {
+  voiceEditor.innerText = "";
+  voiceTextDisplay.innerHTML = "";
+  finalTranscript = "";
+  commandFeedback.textContent = "🎧 Waiting for command...";
+}
+
+completedBtn.onclick = () => {
+  startEditContainer.style.display = 'block';
+  startEditContainer.scrollIntoView({ behavior: 'smooth' });
+};
+
+startEditBtn.onclick = () => {
+  editingMode = true;
+  voiceTextDisplay.innerHTML = voiceEditor.innerText.trim();
+  voiceEditPanel.classList.add('active');
+  commandMicBtn.disabled = false;
+  commandFeedback.textContent = "🎧 Ready for command.";
+  voiceEditPanel.scrollIntoView({ behavior: 'smooth' });
+};
+
+/* Apply Voice Commands */
+function applyCommand(cmdRaw) {
+  if (!editingMode || !cmdRaw) return;
+  const cmd = cmdRaw.toLowerCase().trim();
+  commandFeedback.textContent = "Heard: " + cmdRaw;
+
+  let m;
+  if ((m = cmd.match(/color\s+(\w+)\s+(.+)/))) {
+    const color = m[1], target = m[2].trim();
+    highlightWord(voiceTextDisplay, target, txt => {
+      const el = document.createElement('span');
+      el.style.color = color;
+      el.textContent = txt;
+      return el;
+    });
+    commandFeedback.textContent = `✅ Colored "${target}" ${color}`;
+    return;
+  }
+
+  if ((m = cmd.match(/bold\s+(.+)/))) {
+    const target = m[1].trim();
+    highlightWord(voiceTextDisplay, target, txt => {
+      const el = document.createElement('span');
+      el.className = 'bold';
+      el.textContent = txt;
+      return el;
+    });
+    commandFeedback.textContent = `✅ Bolded "${target}"`;
+    return;
+  }
+
+  if ((m = cmd.match(/underline\s+(.+)/))) {
+    const target = m[1].trim();
+    highlightWord(voiceTextDisplay, target, txt => {
+      const el = document.createElement('span');
+      el.className = 'underline';
+      el.textContent = txt;
+      return el;
+    });
+    commandFeedback.textContent = `✅ Underlined "${target}"`;
+    return;
+  }
+
+  commandFeedback.textContent = "❌ Command not recognized.";
+}
+
+/* Command Mic */
+commandMicBtn.onclick = async () => {
+  if (!commandRecognition) return alert("Speech Recognition not supported.");
+  if (!editingMode) return alert("Click 'Start Editing' first!");
+  const allowed = await requestMicPermissionOnce();
+  if (!allowed) return;
+
+  if (!isCommandMicOn) {
+    commandRecognition.start();
+    commandMicBtn.classList.add('active');
+    commandMicBtn.textContent = '⏹️ Stop';
+    isCommandMicOn = true;
+    commandFeedback.textContent = '🎧 Listening... (say command)';
+  } else {
+    isCommandMicOn = false;
+    commandRecognition.stop();
+    commandMicBtn.classList.remove('active');
+    commandMicBtn.textContent = '🎤';
+    commandFeedback.textContent = '⏹️ Stopped.';
+  }
+};
+</script>
 </body>
 </html>
+
+
