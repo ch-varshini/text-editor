@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Talk & Type Editor - Smooth Mic Access</title>
+
+  <!-- External CSS -->
+  <link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+  <h1>🎙️ Talk & Type Text Editor</h1>
+  <div id="toast">🎧 Microphone access granted!</div>
+
+  <div class="container">
+    <!-- Manual Typing Section -->
+    <div class="editor-section">
+      <label for="manual-text">Manual Typing / Paste Text:</label>
+      <div class="toolbar">
+        <button onclick="document.execCommand('bold')">Bold</button>
+        <button onclick="document.execCommand('underline')">Underline</button>
+        <button onclick="changeColor()">Change Color</button>
+      </div>
+      <div id="manual-text" class="editor" contenteditable="true"></div>
+      <div class="button-row">
+        <button class="clear-button" onclick="manualEditor.innerHTML=''">Clear</button>
+      </div>
+    </div>
+
+    <!-- Voice Section -->
+    <div class="editor-section">
+      <label>Voice Input (Speech-to-Text):</label>
+      <div id="voice-text" class="voice-editor" contenteditable="true"></div>
+      <div class="button-row" style="justify-content:flex-start;">
+        <button id="mic-btn" class="mic-button">🎤 Start</button>
+        <span>Click mic to start/stop speech → text</span>
+      </div>
+      <div class="button-row">
+        <button class="clear-button" onclick="clearVoiceEditor()">Clear</button>
+        <button id="completed-btn" class="completed-button">Completed</button>
+      </div>
+
+      <div id="start-edit-container" style="margin-top:15px;display:none;text-align:center;">
+        <button id="start-edit-btn" class="mic-button">Start Voice Editing</button>
+      </div>
+
+      <div class="voice-edit-panel" id="voice-edit-panel">
+        <div class="voice-text-container">
+          <label>Editable Text Area:</label>
+          <div id="voice-text-display" class="voice-editor" contenteditable="true"></div>
+        </div>
+
+        <div class="voice-commands-container">
+          <label>🎙 Available Voice Commands:</label>
+          <p>• <code>bold word</code><br>• <code>underline word</code><br>• <code>color red word</code></p>
+          <div style="text-align:center;margin-top:10px;">
+            <button id="command-mic-btn" class="mic-button" disabled>🎤</button>
+          </div>
+          <div id="command-feedback">🎧 Waiting for command...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- External JS -->
+  <script src="js/editor.js"></script>
+</body>
+</html>
